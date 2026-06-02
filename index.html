@@ -1,4 +1,4 @@
-`
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -49,17 +49,14 @@
         const activeManhwaId = urlParams.get('id');
 
         function loadData() {
-            console.log("Attempting to fetch data from:", SHEET_CSV_URL);
             Papa.parse(SHEET_CSV_URL, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) { 
-                    console.log("Data successfully loaded:", results.data);
                     if (results.data && results.data.length > 0 && results.data[0].id) {
                         routePage(results.data); 
                     } else {
-                        console.error("Data loaded, but format seems incorrect. Missing 'id' column?");
                         showError();
                     }
                 },
@@ -209,17 +206,44 @@
             return chapterString;
         }
 
+        // CUSTOM DATE PARSER: Converts "25/6/2026 14:00:00" to a valid Javascript Date object
+        function parseCustomDate(dateString) {
+            try {
+                // Split date and time: ["25/6/2026", "14:00:00"]
+                const parts = dateString.trim().split(" ");
+                if (parts.length < 2) return NaN;
+
+                // Split Date: ["25", "6", "2026"]
+                const dateParts = parts[0].split("/");
+                if (dateParts.length !== 3) return NaN;
+                
+                const day = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1; // JS months are 0-indexed (Jan = 0)
+                const year = parseInt(dateParts[2], 10);
+
+                // Split Time: ["14", "00", "00"]
+                const timeParts = parts[1].split(":");
+                const hours = parseInt(timeParts[0], 10) || 0;
+                const minutes = parseInt(timeParts[1], 10) || 0;
+                const seconds = parseInt(timeParts[2], 10) || 0;
+
+                // Create and return the valid time in milliseconds
+                return new Date(year, month, day, hours, minutes, seconds).getTime();
+            } catch (e) {
+                console.error("Error parsing date:", dateString);
+                return NaN;
+            }
+        }
+
         function processIndividualTimer(manhwa, langType, dateCol, chapCol) {
             const dateString = manhwa[dateCol];
             const chapString = manhwa[chapCol];
 
-            // Only proceed if there is actually a date and chapter string
             if (!dateString || dateString.trim() === "" || !chapString) return;
 
-            // Attempt to parse the date
-            let releaseTime = new Date(dateString).getTime();
+            // Use the NEW custom parser here instead of new Date()
+            let releaseTime = parseCustomDate(dateString);
             
-            // Safety check: if the date format in the sheet is totally broken, exit early
             if (isNaN(releaseTime)) {
                 console.warn(`Invalid date format for ${manhwa.id} (${langType}):`, dateString);
                 return; 
@@ -249,7 +273,7 @@
             const timerContainer = document.getElementById(`${manhwa.id}-${langType}-timer`);
             const statusContainer = document.getElementById(`${manhwa.id}-${langType}-status`);
             
-            if (!timerContainer || !statusContainer) return; // Exit if elements aren't on page
+            if (!timerContainer || !statusContainer) return; 
 
             if (distance < 0 || isNaN(distance)) {
                 timerContainer.style.display = "none";
@@ -290,5 +314,3 @@
 </body>
 </html>
 
-
-```
