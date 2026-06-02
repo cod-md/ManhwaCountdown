@@ -60,10 +60,7 @@
                         showError();
                     }
                 },
-                error: function(err) { 
-                    console.error("Failed to fetch or parse CSV:", err);
-                    showError(); 
-                }
+                error: function(err) { showError(); }
             });
         }
 
@@ -88,7 +85,6 @@
             }
         }
 
-        // --- HOME PAGE BUILDER ---
         function buildHomePage(manhwaData) {
             const container = document.getElementById("home-view");
             container.classList.remove("hidden");
@@ -123,7 +119,6 @@
             });
         }
 
-        // --- DETAIL PAGE BUILDER ---
         function buildDetailPage(manhwa) {
             const container = document.getElementById("detail-view");
             container.classList.remove("hidden");
@@ -158,21 +153,22 @@
             }
         }
 
-        // GENERATE THE HUGE CHAPTER TEXT
         function generateBigTimerBlock(manhwaId, langType, chapterText, colorClass, isHiatus) {
             return `
                 <div class="flex-1 bg-slate-800 p-6 sm:p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col items-center">
                     
-                    <!-- NEW EMPHASIZED CHAPTER DISPLAY -->
-                    <div id="${manhwaId}-${langType}-chapter-container" class="mb-8 w-full">
+                    <div id="${manhwaId}-${langType}-chapter-container" class="mb-2 w-full">
                         <span class="${colorClass} text-sm sm:text-base font-bold uppercase tracking-widest block mb-2">
                             ${langType === 'en' ? '🇬🇧 English Release' : '🇰🇷 Korean Raw'}
                         </span>
-                        <span class="text-white text-4xl sm:text-5xl font-black block text-glow">
+                        <span class="text-white text-4xl sm:text-5xl font-black block text-glow mb-1">
                             ${chapterText}
                         </span>
                     </div>
                     
+                    <!-- NEW: Display the user's local timezone here -->
+                    <p id="${manhwaId}-${langType}-localdate" class="text-xs text-slate-400 font-medium mb-6 h-4 flex items-center justify-center gap-1"></p>
+
                     ${isHiatus ? '<p class="text-slate-500 italic mt-4">Timer Paused</p>' : `
                     <div id="${manhwaId}-${langType}-timer" class="flex gap-2 sm:gap-4 w-full justify-center">
                         <div class="time-box flex flex-col items-center justify-center w-14 h-16 sm:w-20 sm:h-24 rounded-xl">
@@ -212,9 +208,10 @@
             return chapterString;
         }
 
-        // CUSTOM DATE PARSER: Converts "25/6/2026 14:00:00"
+        // UPGRADED CUSTOM DATE PARSER (NOW SUPPORTS TIMEZONES LIKE +0900 or -0700)
         function parseCustomDate(dateString) {
             try {
+                // Example input: "15/6/2026 22:00:00 +0900"
                 const parts = dateString.trim().split(" ");
                 if (parts.length < 2) return NaN;
 
@@ -230,7 +227,24 @@
                 const minutes = parseInt(timeParts[1], 10) || 0;
                 const seconds = parseInt(timeParts[2], 10) || 0;
 
-                return new Date(year, month, day, hours, minutes, seconds).getTime();
+                // Check if they included a timezone offset in the sheet
+                let offsetStr = parts[2]; 
+                
+                if (offsetStr) {
+                    // Convert into a strict ISO string so JS Date.parse can accurately calculate global time
+                    const pad = (n) => n.toString().padStart(2, '0');
+                    let isoString = `${year}-${pad(month+1)}-${pad(day)}T${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+                    
+                    offsetStr = offsetStr.replace('GMT', ''); // clean up if they wrote GMT+0900
+                    if (offsetStr.length === 5 && (offsetStr.startsWith('+') || offsetStr.startsWith('-'))) {
+                        offsetStr = offsetStr.slice(0, 3) + ':' + offsetStr.slice(3); // +0900 becomes +09:00
+                    }
+                    isoString += offsetStr;
+                    return new Date(isoString).getTime();
+                } else {
+                    // Default to local time if they didn't write an offset
+                    return new Date(year, month, day, hours, minutes, seconds).getTime();
+                }
             } catch (e) {
                 return NaN;
             }
@@ -243,9 +257,19 @@
             if (!dateString || dateString.trim() === "" || !chapString) return;
 
             let releaseTime = parseCustomDate(dateString);
-            
-            if (isNaN(releaseTime)) {
-                return; 
+            if (isNaN(releaseTime)) return; 
+
+            // Convert global time to user's local timezone for display text
+            const localDateElement = document.getElementById(`${manhwa.id}-${langType}-localdate`);
+            if (localDateElement && !localDateElement.dataset.populated) {
+                const options = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+                localDateElement.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    Releases ${new Date(releaseTime).toLocaleString(undefined, options)} (Your Time)
+                `;
+                localDateElement.dataset.populated = "true"; // Only render this text once
             }
 
             let now = new Date().getTime();
@@ -269,9 +293,20 @@
                             <span class="${colorClass} text-sm sm:text-base font-bold uppercase tracking-widest block mb-2">
                                 ${prefix}
                             </span>
-                            <span class="text-white text-4xl sm:text-5xl font-black block text-glow">
+                            <span class="text-white text-4xl sm:text-5xl font-black block text-glow mb-1">
                                 ${autoIncrementChapter(chapString, intervalsPassed)}
                             </span>
+                        `;
+                    }
+                    
+                    // Update the local time display for the new auto-incremented date
+                    if (localDateElement) {
+                        const options = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+                        localDateElement.innerHTML = `
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                            Releases ${new Date(releaseTime).toLocaleString(undefined, options)} (Your Time)
                         `;
                     }
                 }
